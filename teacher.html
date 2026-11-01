@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NMMS Teacher Dashboard</title>
+<style>body{font-family:Arial;background:#f4f6fb;color:#172033;margin:0}.wrap{max-width:1000px;margin:auto;padding:16px}.panel{background:white;padding:18px;border-radius:14px;margin:12px 0}button{padding:12px 16px;background:#174ea6;color:white;border:0;border-radius:8px}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #ddd;text-align:left}.muted{color:#667085}</style></head><body><div class="wrap">
+<div class="panel"><h1>NMMS SAT Science – Teacher Dashboard</h1><p class="muted">Sign in with the authorised Google account to view participation and submissions.</p><button id="login">Teacher Google sign-in</button> <button id="logout">Sign out</button><p id="status"></p></div>
+<div class="panel"><h2>Live participation</h2><p>Joined: <b id="joined">0</b> · Answering: <b id="answering">0</b> · Submitted: <b id="submitted">0</b></p></div>
+<div class="panel"><h2>Student results</h2><div style="overflow:auto"><table><thead><tr><th>Name</th><th>School</th><th>Answered</th><th>Marks</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script><script src="firebase-config.js"></script>
+<script>
+firebase.initializeApp(window.firebaseConfig);const auth=firebase.auth(),db=firebase.database();const allowed='shyamaramesh.sr@gmail.com';
+document.getElementById('login').onclick=()=>auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+document.getElementById('logout').onclick=()=>auth.signOut();
+auth.onAuthStateChanged(async u=>{
+ if(!u){document.getElementById('status').textContent='Not signed in.';return;}
+ if((u.email||'').toLowerCase()!==allowed){document.getElementById('status').textContent='Access denied for '+(u.email||'this account');await auth.signOut();return;}
+ document.getElementById('status').textContent='Signed in as authorised teacher: '+u.email;
+ db.ref('presence').on('value',s=>{let v=s.val()||{},a=Object.values(v);document.getElementById('joined').textContent=a.length;document.getElementById('answering').textContent=a.filter(x=>x.status==='answering').length;document.getElementById('submitted').textContent=a.filter(x=>x.status==='submitted').length;});
+ db.ref('studentResults').on('value',s=>{let v=s.val()||{},html='';Object.values(v).forEach(x=>{let p=x.profile||{};html+=`<tr><td>${esc(p.name||'')}</td><td>${esc(p.school||'')}</td><td>${Object.keys(x.answers||{}).length}</td><td>${x.score??'—'}</td><td>${x.submitted?'Submitted':'In progress'}</td></tr>`;});document.getElementById('rows').innerHTML=html;});
+});
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+</script></body></html>

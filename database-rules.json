@@ -1,0 +1,25 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "presence": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['name','school','status'])"
+      }
+    },
+    "studentResults": {
+      ".read": "auth != null && auth.token.email === 'shyamaramesh.sr@gmail.com'",
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || auth.token.email === 'shyamaramesh.sr@gmail.com')",
+        "profile": {
+          ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'shyamaramesh.sr@gmail.com')"
+        },
+        "answers": {
+          ".read": "auth != null && (auth.uid === $uid || auth.token.email === 'shyamaramesh.sr@gmail.com')"
+        }
+      }
+    }
+  }
+}

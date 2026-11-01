@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NMMS SAT Science Quiz</title>
+<style>
+:root{font-family:Arial,sans-serif;color:#172033;background:#f4f6fb}
+body{margin:0}.wrap{max-width:900px;margin:auto;padding:16px}
+header,.panel{background:white;border-radius:14px;padding:18px;margin:12px 0;box-shadow:0 2px 12px #17203312}
+h1{font-size:23px;margin:0 0 6px}.muted{color:#667085}.row{display:flex;gap:10px;flex-wrap:wrap}
+input,button{font:inherit;padding:12px;border-radius:9px;border:1px solid #ccd3df}
+input{flex:1;min-width:180px}button{background:#174ea6;color:white;border:0;font-weight:600}
+button:disabled{opacity:.5}.stats{display:flex;gap:10px;flex-wrap:wrap}.stat{background:#eef3ff;padding:10px 14px;border-radius:9px}
+.option{display:block;width:100%;text-align:left;background:#f6f8fc;color:#172033;border:1px solid #d9dfeb;margin:8px 0}
+.option.selected{border:2px solid #174ea6;background:#eaf1ff}.hidden{display:none}
+#timer{font-weight:bold;color:#a12b2b}.qhead{display:flex;justify-content:space-between;gap:10px}
+</style>
+</head>
+<body><div class="wrap">
+<header><h1>NMMS SAT – Science Practice Quiz</h1><div class="muted">Bilingual English / தமிழ் · 90 Questions · 90 Minutes</div></header>
+<section id="join" class="panel">
+<h2>Student entry / மாணவர் பதிவு</h2>
+<div class="row"><input id="studentName" placeholder="Student name / மாணவர் பெயர்"><input id="schoolName" placeholder="School name / பள்ளியின் பெயர்"></div>
+<p class="muted">Use your own name and registration number. Do not share your login with another student.</p>
+<button id="joinBtn">Join quiz / தேர்வில் சேர்க</button><p id="joinMsg" class="muted"></p>
+</section>
+<section id="quiz" class="hidden">
+<div class="panel stats">
+<div class="stat">Joined: <b id="joinedCount">0</b></div>
+<div class="stat">Answering: <b id="answeringCount">0</b></div>
+<div class="stat">Submitted: <b id="submittedCount">0</b></div>
+<div class="stat">Time left: <b id="timer">90:00</b></div>
+</div>
+<div class="panel">
+<div class="qhead"><b id="progress">Question 1 / 90</b><span id="subject" class="muted"></span></div>
+<h3 id="qEn"></h3><h3 id="qTa"></h3>
+<div id="options"></div>
+<div class="row"><button id="prevBtn">Previous</button><button id="nextBtn">Next</button><button id="submitBtn">Submit quiz</button></div>
+<p class="muted" id="saveStatus">Your progress is saved as you answer.</p>
+</div>
+</section>
+<section id="done" class="panel hidden"><h2>Submission recorded / விடைகள் சமர்ப்பிக்கப்பட்டன</h2><p id="doneMsg"></p></section>
+</div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="firebase-config.js"></script><script src="questions.js"></script>
+<script>
+firebase.initializeApp(window.firebaseConfig);
+const auth=firebase.auth(), db=firebase.database();
+let uid=null, student=null, idx=0, answers={}, endAt=0, timerHandle=null;
+const $=id=>document.getElementById(id);
+const show=id=>$(id).classList.remove('hidden'), hide=id=>$(id).classList.add('hidden');
+function counts(){
+ db.ref('presence').on('value',s=>{const v=s.val()||{};let joined=0,answering=0,submitted=0;
+ Object.values(v).forEach(x=>{joined++;if(x.status==='answering')answering++;if(x.status==='submitted')submitted++;});
+ $('joinedCount').textContent=joined;$('answeringCount').textContent=answering;$('submittedCount').textContent=submitted;});
+}
+async function start(){
+ if(!window.quizQuestions || window.quizQuestions.length!==90){$('joinMsg').textContent='Quiz question bank is not installed yet. Please contact the teacher.';return;}
+ const name=$('studentName').value.trim(), school=$('schoolName').value.trim();
+ if(!name||!school){$('joinMsg').textContent='Enter both student name and school name.';return;}
+ try{
+  const cred=await auth.signInAnonymously();uid=cred.user.uid;student={name,school};
+  const existing=(await db.ref('studentResults/'+uid).get()).val();
+  if(existing?.submitted){$('joinMsg').textContent='This device session has already submitted.';return;}
+  await db.ref('presence/'+uid).set({name,school,status:'answering',joinedAt:firebase.database.ServerValue.TIMESTAMP});
+  db.ref('presence/'+uid).onDisconnect().update({status:'offline'});
+  await db.ref('studentResults/'+uid+'/profile').set({name,school});
+  endAt=Date.now()+90*60*1000;
+  hide('join');show('quiz');counts();render();timerHandle=setInterval(tick,1000);tick();
+ }catch(e){$('joinMsg').textContent='Could not join: '+e.message;}
+}
+function render(){
+ const q=window.quizQuestions[idx];$('progress').textContent=`Question ${idx+1} / 90`;$('subject').textContent=q.subject;
+ $('qEn').textContent=q.en;$('qTa').textContent=q.ta;$('options').innerHTML='';
+ q.options.forEach((o,i)=>{const b=document.createElement('button');b.className='option'+(answers[idx]===i?' selected':'');b.innerHTML=`<b>${'ABCD'[i]}.</b> ${o.en}<br>${o.ta}`;b.onclick=()=>choose(i);$('options').appendChild(b);});
+ $('prevBtn').disabled=idx===0;$('nextBtn').disabled=idx===89;
+}
+async function choose(i){answers[idx]=i;render();$('saveStatus').textContent='Saving…';await db.ref(`studentResults/${uid}/answers/${idx}`).set(i);$('saveStatus').textContent='Answer saved.';}
+function tick(){let s=Math.max(0,Math.floor((endAt-Date.now())/1000));$('timer').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');if(s===0)submit();}
+async function submit(){
+ if(!uid)return;clearInterval(timerHandle);
+ // Marks are calculated in the browser in this starter build. This is not tamper-proof.
+ const score=window.quizQuestions.reduce((n,q,i)=>n+(answers[i]===q.answer?1:0),0);
+ await db.ref('studentResults/'+uid).update({score,answered:Object.keys(answers).length,submitted:true,submittedAt:firebase.database.ServerValue.TIMESTAMP});
+ await db.ref('presence/'+uid).update({status:'submitted'});
+ hide('quiz');show('done');$('doneMsg').textContent=`Your answers have been submitted. Score: ${score} / 90`;
+}
+$('joinBtn').onclick=start;$('prevBtn').onclick=()=>{idx--;render()};$('nextBtn').onclick=()=>{idx++;render()};$('submitBtn').onclick=()=>{if(confirm('Submit your quiz now?'))submit()};
+</script></body></html>
